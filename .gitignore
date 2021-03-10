@@ -1,0 +1,9 @@
+./data
+.ipynb_checkpoints/
+Product List-2.xlsx
+cache.sqlite
+data/
+pdfs/
+venv
+
+
