@@ -9,3 +9,4 @@ venv
 lib
 etc
 example.db
+__pycache__
