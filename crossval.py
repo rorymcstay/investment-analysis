@@ -47,7 +47,7 @@ parameter_space = {
 }
 
 #base_estimator = GradientBoostingRegressor()
-#gb_reg.fit(X_train, y_train)
+
 base_learner = GradientBoostingRegressor(max_features=60)
 sh = GridSearchCV(base_learner, parameter_space, n_jobs=8, pre_dispatch=16)
 

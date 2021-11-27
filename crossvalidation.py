@@ -32,7 +32,7 @@ X_test = test[test_cols]
 y_test = test['index']
 
 train = ftse_prediction[train_mask(ftse_prediction)]
-X_train = train[test_cols]
+
 y_train = train['index']
 
 lr_list = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
