@@ -1,0 +1,14 @@
+jupyter
+pandas
+*.tar.gz
+numpy
+scikit-learn
+yahoo-finance
+yfinance
+requests
+seaborn
+cvxopt
+plotly
+zipline-reloaded
+cufflinks
+chart-studio
