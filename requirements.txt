@@ -1,6 +1,5 @@
 jupyter
 pandas
-*.tar.gz
 numpy
 scikit-learn
 yahoo-finance
@@ -12,3 +11,5 @@ plotly
 zipline-reloaded
 cufflinks
 chart-studio
+-e ./src
+pylint
