@@ -40,10 +40,10 @@ VANGUARD_UNIVERSE = {
     'VUTY.L': 20,
     'VEMT.L': 21,
 
-    #'^FTSE': 22,
-    #'^GSPC': 23,
-    #'^FTMC': 24,
-    #'^GDAXI': 25,
+    '^FTSE': 22,
+    '^GSPC': 23,
+    '^FTMC': 24,
+    '^GDAXI': 25,
 
 }
 
@@ -128,7 +128,7 @@ def yahoo_finance(environ: Dict[str, str],
         stock_splits: pd.DataFrame = data[data.stock_splits != 0.0][['stock_splits']].dropna()
         dividends: pd.Series = data[data['dividends'] > 0]['dividends'].squeeze().dropna()
         if not stock_splits.empty:
-            stock_splits['sid'] = VANGUARD_UNIVERSE[ticker]
+            stock_splits['sid'] = VANGUARD_UNIVERSE[symbol]
             stock_splits['ratio'] = stock_splits.stock_splits
             stock_splits['effective_date'] = stock_splits.index.view(np.int64)
             stock_splits = stock_splits[['ratio', 'sid', 'effective_date']]
@@ -141,7 +141,7 @@ def yahoo_finance(environ: Dict[str, str],
             dividends_['declared_date'] = dividends.index
             dividends_['record_date'] = dividends.index
             dividends_['amount'] = dividends.values
-            dividends_['sid'] = VANGUARD_UNIVERSE[ticker]
+            dividends_['sid'] = VANGUARD_UNIVERSE[symbol]
             dividends=dividends_
         adjustment_writer.write(splits=stock_splits if not stock_splits.empty else None,
                                 dividends=dividends if not dividends.empty else None)

@@ -21,9 +21,40 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
+def compute_moving_averages(context, data):
+    short_term = {
+        f'{asset.symbol}_{context.short_term}_mvavg': val for asset, val in \
+                data.history(
+                    assets=list(filter(data.can_trade, context.assets)),
+                    bar_count=context.short_term,
+                    fields=[context.price_col],
+                    frequency='1d'
+                )\
+                .unstack()\
+                .mean()[context.price_col] \
+                .to_dict() \
+                .items()
+    }
+    long_term = {
+        f'{asset.symbol}_{context.long_term}_mvavg': val for asset, val in \
+                data.history(
+                    assets=list(filter(data.can_trade, context.assets)),
+                    bar_count=context.long_term,
+                    fields=[context.price_col],
+                    frequency='1d'
+                )\
+                .unstack()\
+                .mean()[context.price_col] \
+                .to_dict() \
+                .items()
+    }
+    api.record(**short_term, **long_term)
+
+
+
 def initialize(context: TradingAlgorithm):
     context.tick = 0
-    context.window_size = 100
+    context.window_size = 30
     context.rebal_interval = 30
     context.price_col = 'close'
     context.assets = list(map(api.symbol, [
@@ -33,6 +64,9 @@ def initialize(context: TradingAlgorithm):
         'VGER.L',
         'VJPN.L',
     ]))
+
+    context.short_term = 20
+    context.long_term = 100
 
 def handle_data(context: TradingAlgorithm, data: protocol.BarData):
     # Allow history to accumulate 100 days of prices before trading
@@ -54,6 +88,7 @@ def handle_data(context: TradingAlgorithm, data: protocol.BarData):
                 .unstack() \
                 .dropna()
     # Perform Markowitz-style portfolio optimization
+    compute_moving_averages(context, data)
     try:
         weights, _, _ = computation.optimal_portfolio(returns.T)
     except ValueError as ex:
@@ -72,7 +107,7 @@ def handle_data(context: TradingAlgorithm, data: protocol.BarData):
 
 if __name__ == '__main__':
 
-    start = pd.Timestamp('2017-04-10')
+    start = pd.Timestamp('2021-04-10')
     end = pd.Timestamp('2022-04-08')
     logger.setLevel(logging.INFO)
 
