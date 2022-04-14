@@ -27,11 +27,11 @@ def initialize(context: TradingAlgorithm):
     context.rebal_interval = 30
     context.price_col = 'close'
     context.assets = list(map(api.symbol, [
-        #'VUKE.L',
-        #'VMID.L',
+        'VUKE.L',
+        'VMID.L',
         'VUSA.L',
-        #'VGER.L',
-        #'VJPN.L',
+        'VGER.L',
+        'VJPN.L',
     ]))
 
 def handle_data(context: TradingAlgorithm, data: protocol.BarData):
@@ -39,7 +39,7 @@ def handle_data(context: TradingAlgorithm, data: protocol.BarData):
     # and rebalance every day thereafter.
     context.tick += 1
     if context.tick < context.window_size:
-    #    return
+        return
     if context.tick % context.rebal_interval != 0:
         # rebalance every 30 days
         return
@@ -53,7 +53,6 @@ def handle_data(context: TradingAlgorithm, data: protocol.BarData):
                 .pct_change() \
                 .unstack() \
                 .dropna()
-    returns.cumprod
     # Perform Markowitz-style portfolio optimization
     try:
         weights, _, _ = computation.optimal_portfolio(returns.T)
@@ -61,7 +60,7 @@ def handle_data(context: TradingAlgorithm, data: protocol.BarData):
         logger.warning("failed to compute optimal portfolio %s", ex.args)
         return
     # Rebalance portfolio accordingly
-    weights = [[1] for _ in context.assets]
+    #weights = [[1] for _ in context.assets]
     out = {}
     weights = np.array([w[0] for w in weights])
     normalized_weights = weights/sum(weights)
@@ -88,7 +87,7 @@ if __name__ == '__main__':
             #analyze=analyze,
             benchmark_returns=benchmark_returns,
             capital_base=27000,
-            bundle='vanguard-etf-universe',
+            bundle='yahoo-finance-universe',
             data_frequency='daily'
     )
 

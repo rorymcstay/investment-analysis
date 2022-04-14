@@ -40,18 +40,41 @@ VANGUARD_UNIVERSE = {
     'VUTY.L': 20,
     'VEMT.L': 21,
 
-    '^FTSE': 22,
-    '^GSPC': 23,
-    '^FTMC': 24,
-    '^GDAXI': 25,
+    #'^FTSE': 22,
+    #'^GSPC': 23,
+    #'^FTMC': 24,
+    #'^GDAXI': 25,
 
 }
 
-PERIOD = '1y'
+PERIOD_YEARS = 5
 
 def df_cache_key(name, period, symbol):
     now = datetime.now()
     return f'{name}_{period}_{symbol}_{now.year}_{now.month}_{now.day}'
+
+
+def _yield_yahoo_finance_data(
+        equities: pd.DataFrame,
+        universe: yf.Tickers,
+        cache: Dict[str, pd.DataFrame],
+        calendar: TradingCalendar,
+    ):
+
+    for asset in equities.itertuples():
+        ticker = universe.tickers[asset.symbol]
+        symbol = asset.symbol
+        cache_key = df_cache_key('history', PERIOD_YEARS, symbol)
+        data = ticker.history(f'{PERIOD_YEARS}y') if cache_key not in cache else cache[cache_key]
+        data.columns = [c.lower().replace(' ', '_') for c in data.columns]
+        ohlc: pd.DataFrame = data[['open', 'high', 'low', 'close', 'volume']]
+        sessions = calendar.sessions_in_range(asset.start_date, asset.end_date)
+        ohlc_clean = ohlc.dropna()
+        ohlc_clean.index = ohlc_clean.index.tz_localize(pytz.utc)
+        ohlc_clean = ohlc_clean.reindex(sessions)
+        indexer = sessions.slice_indexer(asset.start_date, asset.end_date)
+
+        yield (asset.Index,ohlc_clean)
 
 
 def yahoo_finance(environ: Dict[str, str],
@@ -66,15 +89,16 @@ def yahoo_finance(environ: Dict[str, str],
        show_progress: bool,
        output_dir):
     """"""
+
     universe = yf.Tickers(list(VANGUARD_UNIVERSE.keys()))
     assets = []
-    info_cache_key = str(" ".join(tuple(k for k in universe.tickers.keys())))
+    info_cache_key = f'{PERIOD_YEARS}y_{str(" ".join(tuple(k for k in universe.tickers.keys())))}'
     if info_cache_key not in cache:
         ticker: yf.Ticker
         for symbol, ticker in universe.tickers.items():
             info = ticker.get_info()
-            key = df_cache_key('history', PERIOD, symbol)
-            history = cache[key] if key in cache else ticker.history(PERIOD)
+            key = df_cache_key('history', PERIOD_YEARS, symbol)
+            history = cache[key] if key in cache else ticker.history(f'{PERIOD_YEARS}y')
             cache[key] = history
             assets.append({
                 'sid': VANGUARD_UNIVERSE[symbol],
@@ -92,37 +116,24 @@ def yahoo_finance(environ: Dict[str, str],
     equities.index = equities.sid
     print(equities)
     asset_db_writer.write(equities=equities, chunk_size=100)
-    for asset in equities.itertuples():
-        print(asset)
-        symbol = asset.symbol
-        cache_key = df_cache_key('history', PERIOD, symbol)
-        data = ticker.history(PERIOD) if cache_key not in cache else cache[cache_key]
-        sid = VANGUARD_UNIVERSE[symbol]
+
+    daily_bar_writer.write(_yield_yahoo_finance_data(
+            equities, universe, cache, calendar
+        ), invalid_data_behavior='warn')
+
+    for symbol, ticker in universe.tickers.items():
+        key = df_cache_key('history', PERIOD_YEARS, symbol)
+        data = cache[key] if key in cache else ticker.history(f'{PERIOD_YEARS}y')
         data.columns = [c.lower().replace(' ', '_') for c in data.columns]
-        ohlc: pd.DataFrame = data[['open', 'high', 'low', 'close', 'volume']]
-        sessions = calendar.sessions_in_range(data.iloc[[0]].index[0], data.iloc[[-1]].index[0])
-        ohlc_clean = ohlc.dropna()
-        ohlc_clean.index = ohlc_clean.index.tz_localize(pytz.utc)
-        ohlc_clean = ohlc_clean.reindex(sessions)
-        print(set(ohlc.index.values) - set(ohlc_clean.index.values))
-        daily_bar_writer.write([(sid,ohlc_clean)], invalid_data_behavior='warn')
         stock_splits: pd.DataFrame = data[data.stock_splits != 0.0][['stock_splits']].dropna()
+        dividends: pd.Series = data[data['dividends'] > 0]['dividends'].squeeze().dropna()
         if not stock_splits.empty:
-            stock_splits['sid'] = sid
+            stock_splits['sid'] = VANGUARD_UNIVERSE[ticker]
             stock_splits['ratio'] = stock_splits.stock_splits
             stock_splits['effective_date'] = stock_splits.index.view(np.int64)
             stock_splits = stock_splits[['ratio', 'sid', 'effective_date']]
             stock_splits = stock_splits.reset_index(drop=True)
             stock_splits.index = stock_splits.sid
-            print(symbol, stock_splits)
-            try:
-                adjustment_writer.write(splits=stock_splits)
-            except ValueError as ex:
-                logger.error("Couldn't wrtie stock split data!")
-                if ex.args[0] != 'At least one valid asset id is required.':
-                    raise ex
-
-        dividends: pd.Series = data[data['dividends'] > 0]['dividends'].squeeze().dropna()
         if not dividends.empty:
             dividends_ = pd.DataFrame()
             dividends_['pay_date'] = dividends.index
@@ -130,11 +141,9 @@ def yahoo_finance(environ: Dict[str, str],
             dividends_['declared_date'] = dividends.index
             dividends_['record_date'] = dividends.index
             dividends_['amount'] = dividends.values
-            dividends_['sid'] = sid
-            print(symbol, dividends_)
-            try:
-                adjustment_writer.write(dividends=dividends_)
-            except ValueError as ex:
-                logger.error("Couldn't wrtie dividend data!")
-                if ex.args[0] != 'At least one valid asset id is required.':
-                    raise ex
+            dividends_['sid'] = VANGUARD_UNIVERSE[ticker]
+            dividends=dividends_
+        adjustment_writer.write(splits=stock_splits if not stock_splits.empty else None,
+                                dividends=dividends if not dividends.empty else None)
+
+
