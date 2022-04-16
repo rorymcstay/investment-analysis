@@ -1,4 +1,5 @@
 import logging
+import pathlib
 import warnings
 
 import pandas as pd
@@ -14,6 +15,7 @@ from zipline.algorithm import TradingAlgorithm
 
 from investment_analysis.markowitz import computation
 from investment_analysis.zipline_ingester import VANGUARD_UNIVERSE
+from investment_analysis.markowitz.symbols import TICKERS
 
 
 logger = logging.getLogger(__name__)
@@ -29,12 +31,13 @@ def compute_moving_averages(context, data):
                     bar_count=context.short_term,
                     fields=[context.price_col],
                     frequency='1d'
-                )\
-                .unstack()\
+                ) \
+                .unstack() \
                 .mean()[context.price_col] \
                 .to_dict() \
                 .items()
     }
+
     long_term = {
         f'{asset.symbol}_{context.long_term}_mvavg': val for asset, val in \
                 data.history(
@@ -42,14 +45,14 @@ def compute_moving_averages(context, data):
                     bar_count=context.long_term,
                     fields=[context.price_col],
                     frequency='1d'
-                )\
-                .unstack()\
+                ) \
+                .unstack() \
                 .mean()[context.price_col] \
                 .to_dict() \
                 .items()
     }
-    api.record(**short_term, **long_term)
 
+    api.record(**short_term, **long_term)
 
 
 def initialize(context: TradingAlgorithm):
@@ -57,21 +60,18 @@ def initialize(context: TradingAlgorithm):
     context.window_size = 30
     context.rebal_interval = 30
     context.price_col = 'close'
-    context.assets = list(map(api.symbol, [
-        'VUKE.L',
-        'VMID.L',
-        'VUSA.L',
-        'VGER.L',
-        'VJPN.L',
-    ]))
+    context.assets = list(map(api.symbol, TICKERS))
 
     context.short_term = 20
     context.long_term = 100
+
 
 def handle_data(context: TradingAlgorithm, data: protocol.BarData):
     # Allow history to accumulate 100 days of prices before trading
     # and rebalance every day thereafter.
     context.tick += 1
+    #if context.tick >= context.long_term:
+    #    compute_moving_averages(context, data)
     if context.tick < context.window_size:
         return
     if context.tick % context.rebal_interval != 0:
@@ -82,13 +82,16 @@ def handle_data(context: TradingAlgorithm, data: protocol.BarData):
             assets=list(filter(data.can_trade, context.assets)),
             bar_count=context.window_size,
             fields=[context.price_col],
-            frequency='1d')[context.price_col]
+            frequency='1d')
+    if prices.empty:
+        return
+    prices = prices[context.price_col]
     returns: pd.DataFrame = prices \
                 .pct_change() \
                 .unstack() \
                 .dropna()
     # Perform Markowitz-style portfolio optimization
-    compute_moving_averages(context, data)
+
     try:
         weights, _, _ = computation.optimal_portfolio(returns.T)
     except ValueError as ex:
@@ -122,7 +125,8 @@ if __name__ == '__main__':
             #analyze=analyze,
             benchmark_returns=benchmark_returns,
             capital_base=27000,
-            bundle='yahoo-finance-universe',
+            #bundle='yahoo-finance-universe',
+            bundle='quandl',
             data_frequency='daily'
     )
 

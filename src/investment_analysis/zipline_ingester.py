@@ -45,6 +45,10 @@ VANGUARD_UNIVERSE = {
     '^FTMC': 24,
     '^GDAXI': 25,
 
+    'SVXY': 26,
+    'VIXM': 27,
+
+
 }
 
 PERIOD_YEARS = 5
