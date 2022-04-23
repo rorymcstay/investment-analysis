@@ -1,9 +1,11 @@
 """"""
-from datetime import datetime
 import logging
+import hashlib
+from datetime import datetime
 from typing import Dict
 
 import pytz
+import toolz
 
 import yfinance as yf
 import pandas as pd
@@ -12,44 +14,50 @@ import numpy as np
 from zipline.data.minute_bars import BcolzMinuteBarWriter
 from zipline.data.bcolz_daily_bars import BcolzDailyBarWriter
 from zipline.data.adjustments import SQLiteAdjustmentWriter
+from zipline.data import bundles
 from zipline.utils.calendar_utils import TradingCalendar
 from zipline.assets import AssetDBWriter, Asset
+
+from zipline.pipeline.data import USEquityPricing
+from zipline.pipeline.loaders import USEquityPricingLoader
+from zipline.pipeline.engine import SimplePipelineEngine
+
+from investment_analysis.markowitz.symbols import TICKERS
 
 
 logger = logging.getLogger(__name__)
 
 
-VANGUARD_UNIVERSE = {
-    'VUKE.L': 1,
-    'VMID.L': 2,
-    'VUSA.L': 3,
-    'VERX.L': 4,
-    'VGER.L': 6,
-    'VWRL.L': 8,
-    'VHYL.L': 9,
-    'VEVE.L': 10,
-    'VJPN.L': 11,
-    'VAPX.L': 12,
-    'VNRT.L': 13,
-    'VFEM.L': 14,
-    'VECP.L': 15,
-    'VETY.L': 16,
-    'VAGP.L': 17,
-    'VGOV.L': 18,
-    'VUCP.L': 19,
-    'VUTY.L': 20,
-    'VEMT.L': 21,
+VANGUARD_UNIVERSE = [
+    'VUKE.L',
+    'VMID.L',
+    'VUSA.L',
+    'VERX.L',
+    'VGER.L',
+    'VWRL.L',
+    'VHYL.L',
+    'VEVE.L',
+    'VJPN.L',
+    'VAPX.L',
+    'VNRT.L',
+    'VFEM.L',
+    'VECP.L',
+    'VETY.L',
+    'VAGP.L',
+    'VGOV.L',
+    'VUCP.L',
+    'VUTY.L',
+    'VEMT.L',
 
-    '^FTSE': 22,
-    '^GSPC': 23,
-    '^FTMC': 24,
-    '^GDAXI': 25,
+    '^FTSE',
+    '^GSPC',
+    '^FTMC',
+    '^GDAXI',
 
-    'SVXY': 26,
-    'VIXM': 27,
+    'SVXY',
+    'VIXM'
 
-
-}
+]
 
 PERIOD_YEARS = 5
 
@@ -94,9 +102,10 @@ def yahoo_finance(environ: Dict[str, str],
        output_dir):
     """"""
 
-    universe = yf.Tickers(list(VANGUARD_UNIVERSE.keys()))
+    #universe = yf.Tickers(list(VANGUARD_UNIVERSE.keys()))
+    universe = yf.Tickers(list(TICKERS))
     assets = []
-    info_cache_key = f'{PERIOD_YEARS}y_{str(" ".join(tuple(k for k in universe.tickers.keys())))}'
+    info_cache_key = hashlib.sha224(f'{PERIOD_YEARS}y_{str(" ".join(tuple(k for k in universe.tickers.keys())))}'.encode('utf-8')).hexdigest()
     if info_cache_key not in cache:
         ticker: yf.Ticker
         for symbol, ticker in universe.tickers.items():
@@ -105,7 +114,7 @@ def yahoo_finance(environ: Dict[str, str],
             history = cache[key] if key in cache else ticker.history(f'{PERIOD_YEARS}y')
             cache[key] = history
             assets.append({
-                'sid': VANGUARD_UNIVERSE[symbol],
+                'sid': TICKERS.index(symbol),
                 'symbol': symbol,
                 'asset_name': info['shortName'],
                 'exchange': info['exchange'],
@@ -151,3 +160,93 @@ def yahoo_finance(environ: Dict[str, str],
                                 dividends=dividends if not dividends.empty else None)
 
 
+
+@toolz.memoize
+def _pipeline_engine_and_calendar_for_bundle(bundle):
+    """Create a pipeline engine for the given bundle.
+
+    Parameters
+    ----------
+    bundle : str
+        The name of the bundle to create a pipeline engine for.
+
+    Returns
+    -------
+    engine : zipline.pipleine.engine.SimplePipelineEngine
+        The pipeline engine which can run pipelines against the bundle.
+    calendar : zipline.utils.calendars.TradingCalendar
+        The trading calendar for the bundle.
+    """
+    bundle_data = bundles.load(bundle)
+    pipeline_loader = USEquityPricingLoader.without_fx(
+        bundle_data.equity_daily_bar_reader,
+        bundle_data.adjustment_reader,
+    )
+
+    def choose_loader(column):
+        if column in USEquityPricing.columns:
+            return pipeline_loader
+        raise ValueError(
+            'No PipelineLoader registered for column %s.' % column
+        )
+
+    calendar = bundle_data.equity_daily_bar_reader.trading_calendar
+    return (
+        SimplePipelineEngine(
+            choose_loader,
+            bundle_data.asset_finder,
+            #calendar.all_sessions,
+        ),
+        calendar,
+    )
+
+
+def run_pipeline_against_bundle(pipeline, start_date, end_date, bundle):
+    """Run a pipeline against the data in a bundle.
+
+    Parameters
+    ----------
+    pipeline : zipline.pipeline.Pipeline
+        The pipeline to run.
+    start_date : pd.Timestamp
+        The start date of the pipeline.
+    end_date : pd.Timestamp
+        The end date of the pipeline.
+    bundle : str
+        The name of the bundle to run the pipeline against.
+
+    Returns
+    -------
+    result : pd.DataFrame
+        The result of the pipeline.
+    """
+    engine, calendar = _pipeline_engine_and_calendar_for_bundle(bundle)
+
+    start_date = pd.Timestamp(start_date, tz='utc')
+    if not calendar.is_session(start_date):
+        # this is not a trading session, advance to the next session
+        start_date = calendar.minute_to_session_label(
+            start_date,
+            direction='next',
+        )
+
+    end_date = pd.Timestamp(end_date, tz='utc')
+    if not calendar.is_session(end_date):
+        # this is not a trading session, advance to the previous session
+        end_date = calendar.minute_to_session_label(
+            end_date,
+            direction='previous',
+        )
+
+    return engine.run_pipeline(pipeline, start_date, end_date)
+
+if __name__ == '__main__':
+    from zipline.pipeline import Pipeline
+    from zipline.pipeline.data import USEquityPricing
+    out = run_pipeline_against_bundle(
+       Pipeline({'close': USEquityPricing.close.latest}),
+       '2012',
+       '2013',
+       bundle='quandl'
+    )
+    print(out)

@@ -56,11 +56,17 @@ def compute_moving_averages(context, data):
 
 
 def initialize(context: TradingAlgorithm):
+    sp500_list = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')[0]
     context.tick = 0
     context.window_size = 30
     context.rebal_interval = 30
     context.price_col = 'close'
-    context.assets = list(map(api.symbol, TICKERS))
+    #symbols = set(sp500_list.Symbol).intersection(set(TICKERS))
+    symbols = [
+            'AAPL', 'MSFT', 'GOOG'
+    ]
+    print(symbols)
+    context.assets = list(map(api.symbol, symbols))
 
     context.short_term = 20
     context.long_term = 100
