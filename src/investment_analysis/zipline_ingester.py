@@ -6,6 +6,7 @@ from typing import Dict
 
 import pytz
 import toolz
+from progressbar import progressbar
 
 import yfinance as yf
 import pandas as pd
@@ -108,11 +109,15 @@ def yahoo_finance(environ: Dict[str, str],
     info_cache_key = hashlib.sha224(f'{PERIOD_YEARS}y_{str(" ".join(tuple(k for k in universe.tickers.keys())))}'.encode('utf-8')).hexdigest()
     if info_cache_key not in cache:
         ticker: yf.Ticker
-        for symbol, ticker in universe.tickers.items():
+        for symbol, ticker in progressbar(universe.tickers.items()):
             info = ticker.get_info()
+            if info.get('refularMarketPrice') is None:
+                continue
             key = df_cache_key('history', PERIOD_YEARS, symbol)
             history = cache[key] if key in cache else ticker.history(f'{PERIOD_YEARS}y')
             cache[key] = history
+            if history.empty:
+                continue
             assets.append({
                 'sid': TICKERS.index(symbol),
                 'symbol': symbol,
@@ -137,6 +142,8 @@ def yahoo_finance(environ: Dict[str, str],
     for symbol, ticker in universe.tickers.items():
         key = df_cache_key('history', PERIOD_YEARS, symbol)
         data = cache[key] if key in cache else ticker.history(f'{PERIOD_YEARS}y')
+        if data.empty:
+            continue
         data.columns = [c.lower().replace(' ', '_') for c in data.columns]
         stock_splits: pd.DataFrame = data[data.stock_splits != 0.0][['stock_splits']].dropna()
         dividends: pd.Series = data[data['dividends'] > 0]['dividends'].squeeze().dropna()
