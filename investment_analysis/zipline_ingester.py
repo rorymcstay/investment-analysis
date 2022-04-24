@@ -29,9 +29,8 @@ from zipline.pipeline.engine import SimplePipelineEngine
 logger = logging.getLogger(__name__)
 
 
-
-
 PERIOD_YEARS = 5
+
 
 def df_cache_key(name, period, symbol):
     now = datetime.now()
@@ -151,9 +150,9 @@ def _yahoo_finance(environ: Dict[str, str],
             continue
         data.columns = [c.lower().replace(' ', '_') for c in data.columns]
         stock_splits: pd.DataFrame = data[data.stock_splits != 0.0][['stock_splits']].dropna()
-        dividends: pd.Series = data[data['dividends'] > 0]['dividends'].squeeze().dropna()
+        dividends: pd.Series = pd.Series(data[data['dividends'] > 0]['dividends'].squeeze()).dropna()
         if not stock_splits.empty:
-            stock_splits['sid'] = VANGUARD_UNIVERSE[symbol]
+            stock_splits['sid'] = tickers.index(symbol)
             stock_splits['ratio'] = stock_splits.stock_splits
             stock_splits['effective_date'] = stock_splits.index.view(np.int64)
             stock_splits = stock_splits[['ratio', 'sid', 'effective_date']]
@@ -166,7 +165,7 @@ def _yahoo_finance(environ: Dict[str, str],
             dividends_['declared_date'] = dividends.index
             dividends_['record_date'] = dividends.index
             dividends_['amount'] = dividends.values
-            dividends_['sid'] = VANGUARD_UNIVERSE[symbol]
+            dividends_['sid'] = tickers.index(symbol)
             dividends=dividends_
         adjustment_writer.write(splits=stock_splits if not stock_splits.empty else None,
                                 dividends=dividends if not dividends.empty else None)

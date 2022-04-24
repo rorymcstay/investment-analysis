@@ -14,7 +14,6 @@ from zipline import run_algorithm
 from zipline.algorithm import TradingAlgorithm
 
 from investment_analysis.markowitz import computation
-from investment_analysis.zipline_ingester import VANGUARD_UNIVERSE
 
 
 logger = logging.getLogger(__name__)
