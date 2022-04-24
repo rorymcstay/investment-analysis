@@ -1,8 +1,38 @@
 import pandas as pd
 
 
+VANGUARD_UNIVERSE = [
+    'VUKE.L',
+    'VMID.L',
+    'VUSA.L',
+    'VERX.L',
+    'VGER.L',
+    'VWRL.L',
+    'VHYL.L',
+    'VEVE.L',
+    'VJPN.L',
+    'VAPX.L',
+    'VNRT.L',
+    'VFEM.L',
+    'VECP.L',
+    'VETY.L',
+    'VAGP.L',
+    'VGOV.L',
+    'VUCP.L',
+    'VUTY.L',
+    'VEMT.L',
 
-TICKERS = \
+    '^FTSE',
+    '^GSPC',
+    '^FTMC',
+    '^GDAXI',
+
+    'SVXY',
+    'VIXM'
+
+]
+
+NASDAQ = \
 """A
 AA
 AAL

@@ -24,42 +24,12 @@ from zipline.pipeline.data import USEquityPricing
 from zipline.pipeline.loaders import USEquityPricingLoader
 from zipline.pipeline.engine import SimplePipelineEngine
 
-from investment_analysis.markowitz.symbols import TICKERS
 
 
 logger = logging.getLogger(__name__)
 
 
-VANGUARD_UNIVERSE = [
-    'VUKE.L',
-    'VMID.L',
-    'VUSA.L',
-    'VERX.L',
-    'VGER.L',
-    'VWRL.L',
-    'VHYL.L',
-    'VEVE.L',
-    'VJPN.L',
-    'VAPX.L',
-    'VNRT.L',
-    'VFEM.L',
-    'VECP.L',
-    'VETY.L',
-    'VAGP.L',
-    'VGOV.L',
-    'VUCP.L',
-    'VUTY.L',
-    'VEMT.L',
 
-    '^FTSE',
-    '^GSPC',
-    '^FTMC',
-    '^GDAXI',
-
-    'SVXY',
-    'VIXM'
-
-]
 
 PERIOD_YEARS = 5
 
@@ -101,7 +71,7 @@ def _split(a, n):
     return [a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n)]
 
 
-def _batch_info(tickers):
+def _batch_info(tickers, batch_size):
 
     def get_info(ticker, storage):
         try:
@@ -109,17 +79,19 @@ def _batch_info(tickers):
         except Exception:
             logger.error("Error retrieving info for %s", ticker.ticker)
 
-    for batch in _chunks(tickers, min(len(tickers), 10)):
+    for batch in progressbar(list(_chunks(tickers, min(len(tickers), batch_size))), prefix=f'{batch_size=}'):
         info_batch = []
         threads = [threading.Thread(target=get_info, args=(t, info_batch)) \
-                for t in batch]
+                                                                for t in batch]
         [t.start() for t in threads]
-        [t.join() for t in progressbar(threads)]
+        [t.join() for t in threads]
         yield info_batch
 
 
-def yahoo_finance(tickers):
-    return lambda *args, **kwargs: _yahoo_finance(*args, **kwargs, tickers=tickers)
+def yahoo_finance(tickers, batch_size=10):
+    return lambda *args, **kwargs: _yahoo_finance(*args, **kwargs,
+                                            tickers=tickers,
+                                            batch_size=batch_size)
 
 
 def _yahoo_finance(environ: Dict[str, str],
@@ -133,17 +105,16 @@ def _yahoo_finance(environ: Dict[str, str],
        cache: Dict[str, pd.DataFrame],
        show_progress: bool,
        output_dir,
-       tickers=TICKERS):
+       tickers=['AAPL'],
+       batch_size=10,):
     """"""
 
-    #universe = yf.Tickers(list(VANGUARD_UNIVERSE.keys()))
     universe = yf.Tickers(list(tickers))
     assets = []
     info_cache_key = hashlib.sha224(f'{PERIOD_YEARS}y_{str(" ".join(tuple(k for k in universe.tickers.keys())))}'.encode('utf-8')).hexdigest()
     if info_cache_key not in cache:
         ticker: yf.Ticker
-        num_batches = len(list(_chunks(list(universe.tickers.keys()), 10)))
-        for batch in progressbar(_batch_info(list(universe.tickers.values())), max_value=num_batches):
+        for batch in _batch_info(list(universe.tickers.values()), batch_size=batch_size):
             for ticker, info in batch:
                 if info.get('regularMarketPrice') is None:
                     continue

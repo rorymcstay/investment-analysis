@@ -15,7 +15,6 @@ from zipline.algorithm import TradingAlgorithm
 
 from investment_analysis.markowitz import computation
 from investment_analysis.zipline_ingester import VANGUARD_UNIVERSE
-from investment_analysis.markowitz.symbols import TICKERS
 
 
 logger = logging.getLogger(__name__)
@@ -61,12 +60,7 @@ def initialize(context: TradingAlgorithm):
     context.window_size = 30
     context.rebal_interval = 30
     context.price_col = 'close'
-    #symbols = set(sp500_list.Symbol).intersection(set(TICKERS))
-    symbols = [
-            'AAPL', 'MSFT', 'GOOG'
-    ]
-    print(symbols)
-    context.assets = list(map(api.symbol, symbols))
+    context.assets = list(map(api.symbol, sp500_list.symbols))
 
     context.short_term = 20
     context.long_term = 100
