@@ -1,4 +1,5 @@
 """"""
+import threading
 import logging
 import hashlib
 from datetime import datetime
@@ -90,7 +91,38 @@ def _yield_yahoo_finance_data(
         yield (asset.Index,ohlc_clean)
 
 
-def yahoo_finance(environ: Dict[str, str],
+def _chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+def _split(a, n):
+    k, m = divmod(len(a), n)
+    return [a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n)]
+
+
+def _batch_info(tickers):
+
+    def get_info(ticker, storage):
+        try:
+            storage.append((ticker, ticker.get_info()))
+        except Exception:
+            logger.error("Error retrieving info for %s", ticker.ticker)
+
+    for batch in _chunks(tickers, min(len(tickers), 10)):
+        info_batch = []
+        threads = [threading.Thread(target=get_info, args=(t, info_batch)) \
+                for t in batch]
+        [t.start() for t in threads]
+        [t.join() for t in progressbar(threads)]
+        yield info_batch
+
+
+def yahoo_finance(tickers):
+    return lambda *args, **kwargs: _yahoo_finance(*args, **kwargs, tickers=tickers)
+
+
+def _yahoo_finance(environ: Dict[str, str],
        asset_db_writer: AssetDBWriter,
        minute_bar_writer: BcolzMinuteBarWriter,
        daily_bar_writer: BcolzDailyBarWriter,
@@ -100,33 +132,35 @@ def yahoo_finance(environ: Dict[str, str],
        end_session: pd.Timestamp,
        cache: Dict[str, pd.DataFrame],
        show_progress: bool,
-       output_dir):
+       output_dir,
+       tickers=TICKERS):
     """"""
 
     #universe = yf.Tickers(list(VANGUARD_UNIVERSE.keys()))
-    universe = yf.Tickers(list(TICKERS))
+    universe = yf.Tickers(list(tickers))
     assets = []
     info_cache_key = hashlib.sha224(f'{PERIOD_YEARS}y_{str(" ".join(tuple(k for k in universe.tickers.keys())))}'.encode('utf-8')).hexdigest()
     if info_cache_key not in cache:
         ticker: yf.Ticker
-        for symbol, ticker in progressbar(universe.tickers.items()):
-            info = ticker.get_info()
-            if info.get('refularMarketPrice') is None:
-                continue
-            key = df_cache_key('history', PERIOD_YEARS, symbol)
-            history = cache[key] if key in cache else ticker.history(f'{PERIOD_YEARS}y')
-            cache[key] = history
-            if history.empty:
-                continue
-            assets.append({
-                'sid': TICKERS.index(symbol),
-                'symbol': symbol,
-                'asset_name': info['shortName'],
-                'exchange': info['exchange'],
-                'start_date': history.iloc[[0]].index[0],
-                'first_traded': history.iloc[[0]].index[0],
-                'end_date': history.iloc[[-1]].index[0]
-            })
+        num_batches = len(list(_chunks(list(universe.tickers.keys()), 10)))
+        for batch in progressbar(_batch_info(list(universe.tickers.values())), max_value=num_batches):
+            for ticker, info in batch:
+                if info.get('regularMarketPrice') is None:
+                    continue
+                key = df_cache_key('history', PERIOD_YEARS, ticker.ticker)
+                history = cache[key] if key in cache else ticker.history(f'{PERIOD_YEARS}y')
+                cache[key] = history
+                if history.empty:
+                    continue
+                assets.append({
+                    'sid': tickers.index(ticker.ticker),
+                    'symbol': ticker.ticker,
+                    'asset_name': info['shortName'],
+                    'exchange': info['exchange'],
+                    'start_date': history.iloc[[0]].index[0],
+                    'first_traded': history.iloc[[0]].index[0],
+                    'end_date': history.iloc[[-1]].index[0]
+                })
         equities = pd.DataFrame(data=assets)
     else:
         equities = cache[info_cache_key]
