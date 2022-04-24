@@ -20,8 +20,8 @@ from zipline.data import bundles
 from zipline.utils.calendar_utils import TradingCalendar
 from zipline.assets import AssetDBWriter, Asset
 
-from zipline.pipeline.data import USEquityPricing
-from zipline.pipeline.loaders import USEquityPricingLoader
+from zipline.pipeline.data import EquityPricing
+from zipline.pipeline.loaders import EquityPricingLoader
 from zipline.pipeline.engine import SimplePipelineEngine
 
 
@@ -155,7 +155,6 @@ def _yahoo_finance(environ: Dict[str, str],
             stock_splits['sid'] = tickers.index(symbol)
             stock_splits['ratio'] = stock_splits.stock_splits
             stock_splits['effective_date'] = stock_splits.index.view(np.int64)
-            #stock_splits = stock_splits.reindex(stock_splits.sid)
             stock_splits = stock_splits[['ratio', 'sid', 'effective_date']]
             stock_splits = stock_splits.reset_index(drop=True)
 
@@ -168,7 +167,8 @@ def _yahoo_finance(environ: Dict[str, str],
             dividends_['amount'] = dividends.values
             dividends_['sid'] = tickers.index(symbol)
             dividends=dividends_
-        adjustment_writer.write(splits=stock_splits if not stock_splits.empty else None,
+        if tickers.index(symbol) in equities.index:
+            adjustment_writer.write(splits=stock_splits if not stock_splits.empty else None,
                                 dividends=dividends if not dividends.empty else None)
 
 
@@ -190,13 +190,13 @@ def _pipeline_engine_and_calendar_for_bundle(bundle):
         The trading calendar for the bundle.
     """
     bundle_data = bundles.load(bundle)
-    pipeline_loader = USEquityPricingLoader.without_fx(
+    pipeline_loader = EquityPricingLoader.without_fx(
         bundle_data.equity_daily_bar_reader,
         bundle_data.adjustment_reader,
     )
 
     def choose_loader(column):
-        if column in USEquityPricing.columns:
+        if column in EquityPricing.columns:
             return pipeline_loader
         raise ValueError(
             'No PipelineLoader registered for column %s.' % column
