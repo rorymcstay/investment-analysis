@@ -155,9 +155,10 @@ def _yahoo_finance(environ: Dict[str, str],
             stock_splits['sid'] = tickers.index(symbol)
             stock_splits['ratio'] = stock_splits.stock_splits
             stock_splits['effective_date'] = stock_splits.index.view(np.int64)
+            #stock_splits = stock_splits.reindex(stock_splits.sid)
             stock_splits = stock_splits[['ratio', 'sid', 'effective_date']]
             stock_splits = stock_splits.reset_index(drop=True)
-            stock_splits.index = stock_splits.sid
+
         if not dividends.empty:
             dividends_ = pd.DataFrame()
             dividends_['pay_date'] = dividends.index
