@@ -65,7 +65,7 @@ RUN pip install -e /investment-analysis
 # start the jupyter server
 #
 WORKDIR ${PROJECT_DIR}
-RUN chmod +x /investment-analysis/docker_cmd.sh
+RUN chmod +x /investment-analysis/scripts/docker_cmd.sh
 
 ENTRYPOINT ["tini", "--"]
 CMD /investment-analysis/scripts/docker_cmd.sh

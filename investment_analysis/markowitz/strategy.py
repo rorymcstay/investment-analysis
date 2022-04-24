@@ -4,6 +4,7 @@ import warnings
 
 import pandas as pd
 import numpy as np
+import yfinance as yf
 
 import matplotlib.pyplot as plt
 import pandas_datareader.data as web
@@ -59,7 +60,8 @@ def initialize(context: TradingAlgorithm):
     context.window_size = 30
     context.rebal_interval = 30
     context.price_col = 'close'
-    context.assets = list(map(api.symbol, sp500_list.Symbols))
+    cspx_holdings = yf.Ticker('CSPX').get_info()['holdings']
+    context.assets = list(map(lambda d: api.symbol(d['symbol']), cspx_holdings))
 
     context.short_term = 20
     context.long_term = 100
