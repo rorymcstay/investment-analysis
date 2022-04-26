@@ -48,7 +48,9 @@ def _yield_yahoo_finance_data(
         ticker = universe.tickers[asset.symbol]
         symbol = asset.symbol
         cache_key = df_cache_key('history', PERIOD_YEARS, symbol)
-        data = ticker.history(f'{PERIOD_YEARS}y') if cache_key not in cache else cache[cache_key]
+        if cache_key not in cache:
+            continue
+        data = cache[cache_key]
         data.columns = [c.lower().replace(' ', '_') for c in data.columns]
         ohlc: pd.DataFrame = data[['open', 'high', 'low', 'close', 'volume']]
         sessions = calendar.sessions_in_range(asset.start_date, asset.end_date)
@@ -145,7 +147,10 @@ def _yahoo_finance(environ: Dict[str, str],
 
     for symbol, ticker in universe.tickers.items():
         key = df_cache_key('history', PERIOD_YEARS, symbol)
-        data = cache[key] if key in cache else ticker.history(f'{PERIOD_YEARS}y')
+        if key not in cache:
+            logger.warning("No data for %s", key)
+            continue
+        data = cache[key]
         if data.empty:
             continue
         data.columns = [c.lower().replace(' ', '_') for c in data.columns]

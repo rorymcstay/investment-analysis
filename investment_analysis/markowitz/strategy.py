@@ -68,8 +68,8 @@ def initialize(context: TradingAlgorithm):
 
 
 def handle_data(context: TradingAlgorithm, data: protocol.BarData):
-    # Allow history to accumulate 100 days of prices before trading
-    # and rebalance every day thereafter.
+    # Allow history to accumulate `windows_size` days of prices before trading
+    # and rebalance every `rebal_interval` thereafter.
     context.tick += 1
     #if context.tick >= context.long_term:
     #    compute_moving_averages(context, data)
